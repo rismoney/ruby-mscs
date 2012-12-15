@@ -1,13 +1,12 @@
-# clustergroup_spec.rb
+# cluster_group_spec.rb
 require 'win32ole'
-require 'clustergroup'
+require 'mscs'
 
-describe "clustergroup" do
+describe "cluster_group" do
 
   myname='deleteme'
   clunames = [
   'cc-fs01a',
-  'dummy',
   ].each do |cluname|
     context "when clustername is #{cluname}" do
     
@@ -15,7 +14,7 @@ describe "clustergroup" do
         before :all do
           @cluster = WIN32OLE.new('MSCluster.Cluster')
           @cluster.open(cluname)
-          clustergroup myname
+          cluster_group 'add',myname
         end
         after :all do
           @cluster.resourcegroups.deleteitem(myname)
