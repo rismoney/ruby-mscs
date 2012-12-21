@@ -71,3 +71,29 @@ describe "cluster_open" do
       end
   end
 end
+
+describe "cluster_group" do
+  context "when clustername is #{cluster_name}" do
+    before :all do
+      $opensesame=Mscs::Cluster.open('Cluster',server)
+      # hack #1
+      $cluster = WIN32OLE.new('MSCluster.Cluster')
+      $cluster.open(server)
+    end
+    it "creates a cluster resource group" do
+      Mscs::Group.add($opensesame, cluster_newgroup)
+      $cluster.resourcegroups.item(cluster_newgroup).Name.should eq(cluster_newgroup)
+    end
+    it "query a specific resource group" do
+      groupquery=Mscs::Group.query($opensesame, cluster_existinggroup)
+      groupquery.should be_a_kind_of(Array)
+      groupquery.should include(cluster_existingresource)
+      
+    end
+    it "deletes a cluster resource group" do
+      removal=Mscs::Group.remove($opensesame,cluster_newgroup)
+      removal.should eq(0)
+      #expect {cluster.resourcegroups.item(cluster_newgroup)}.to raise_error
+    end
+  end
+end
