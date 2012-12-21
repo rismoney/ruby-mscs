@@ -142,4 +142,21 @@ module Mscs
     end 
 
   end
+  
+  class Group
+    def self.add(hCluster, res_grp)
+      res_grp = utf8_to_utf16le(res_grp)
+      Functions::CreateClusterGroup.call(hCluster,res_grp)
+    end
+
+    def self.remove(hCluster, res_grp)
+      hGroup=Mscs::Cluster.open('Group', res_grp, hCluster)
+      Functions::DeleteClusterGroup.call(hGroup)    # this needs to be the handle of the group not the name. enum groups...
+    end
+
+    def self.query(hCluster, res_grp)
+      hGroup=Mscs::Cluster.open('Group', res_grp, hCluster)
+      Mscs::Cluster.enumerate('Group',hGroup, Constants::CLUSTER_GROUP_ENUM_CONTAINS)
+    end  
+  end
 end
