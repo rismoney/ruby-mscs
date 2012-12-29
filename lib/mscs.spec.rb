@@ -4,7 +4,7 @@ require 'mscs'
 
 describe "cluster_group" do
 
-  myname='deleteme'
+  myname="deleteme"
   clunames = [
   'cc-fs01a',
   ].each do |cluname|
@@ -14,7 +14,7 @@ describe "cluster_group" do
         before :all do
           @cluster = WIN32OLE.new('MSCluster.Cluster')
           @cluster.open(cluname)
-          cluster_group 'add',myname
+          cluster_group('add',myname)
         end
         after :all do
           @cluster.resourcegroups.deleteitem(myname)
