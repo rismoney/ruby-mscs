@@ -53,36 +53,38 @@ CloseCluster = Win32API.new('clusapi','CloseCluster',['L'], 'L')
 
 $hCluster = OpenCluster.call(cluster_name)
 
-def ClusterEnumeration (EnumerationType,handle,dwtype)
-  buf=(0.chr*260).encode('UTF-16LE')
-  buf2=(0.chr*260).encode('UTF-16LE')
-  size='260'.encode('UTF-16LE')
-  grouplist = []
-  i=0
+def clusterenumeration(enumerationtype, myhandle, dwtype)
+  enc, chrs = 'UTF-16LE', (0.chr * 260)
+  buffer1  = chrs.encode(enc)
+  buffer2 = chrs.encode(enc)
+  size = '260'.encode(enc)
+  outputlist = []
+  handle = myhandle
 
-  case EnumerationType
-    when "Cluster"
-      hEnum = ClusterOpenEnum.call($hCluster,dwtype)
-      EnumCall = ClusterEnum.call(hEnum,i,buf,buf2,size)
-    when "Group"
-      hEnum = ClusterGroupOpenEnum.call(handle,dwtype)
-      EnumCall = ClusterGroupEnum.call(hEnum,i,buf,buf2,size)
-    when "Resource"
-      hEnum = ClusterResourceOpenEnum.call(handle,dwtype)
-      EnumCall = ClusterResourceEnum.call(hEnum,i,buf,buf2,size)
-  end  
+  cluster, cluster_enum = begin
+    case enumerationtype
+    when 'Cluster'  ; handle = $hCluster; [ClusterOpenEnum, ClusterEnum]
+    when 'Group'    ; [ClusterGroupOpenEnum, ClusterGroupEnum]
+    when 'Resource' ; [ClusterResourceOpenEnum, ClusterResourceEnum]
+    end
+  end
+  
+  hEnum = cluster.call(handle, dwtype)
 
-  until EnumCall !=0
-    bufferlength=size.unpack('L').first
-    outputname=buf2.slice(0..bufferlength).encode('US-ASCII').strip
-    outputlist << groupname
-    size='260'.encode('UTF-16LE')
+  i = 0
+  until cluster_enum.call(hEnum, i, buffer1, buffer2, size) !=0
+    bufferlength, = size.unpack('L')
+    outputname = buf2.slice(0..bufferlength).encode('US-ASCII').strip
+    outputlist << outputname
+    size = '260'.encode(enc)
     i += 1
   end
-  outputlist
+
+  return outputlist
 end
 
-def cluster_group (action,groupname)
+
+def cluster_group(action, groupname)
   groupname = utf8_to_utf16le(groupname)
   case action
     when "add"
@@ -90,7 +92,7 @@ def cluster_group (action,groupname)
     when "remove"
       DeleteClusterGroup.call(groupname)    
     when "query"
-      ClusterEnumeration(CLUSTER_ENUM_GROUP,groupname,CLUSTER_GROUP_ENUM_CONTAINS)
+      ClusterEnumeration('Group',groupname,CLUSTER_GROUP_ENUM_CONTAINS)
     end  
 end
   
