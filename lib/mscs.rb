@@ -159,4 +159,122 @@ module Mscs
       Mscs::Cluster.enumerate('Group',hGroup, Constants::CLUSTER_GROUP_ENUM_CONTAINS)
     end  
   end
+  
+  class Resource
+    def self.add(hCluster, res_name, res_type, res_grp)
+      res_type = 'IP Address' if res_type =~ /ip/i
+      res_type = 'Network Name' if ['nn', 'networkname'].include?(res_type.downcase)
+      res_name = utf8_to_utf16le(res_name)
+      res_type = utf8_to_utf16le(res_type)
+      hGroup=Mscs::Cluster.open('Group', res_grp, hCluster)
+      hRes = Functions::CreateClusterResource.call(hGroup,res_name,res_type,0)
+    end
+
+    def self.remove(hCluster, res_name)
+      hResource=Mscs::Cluster.open('Resource', res_name, hCluster)
+      Functions::DeleteClusterResource.call(hResource)
+    end
+
+    def self.query(hCluster, res_name)
+      hResource = Mscs::Cluster.open('Resource', res_name, hCluster)
+      # if hResource is a Fix >0 then run this, otherwise irb shits the bed.  we should probably fix all the other calls after opens
+      Mscs::Cluster.enumerate('Resource', hResource, Constants::CLUSTER_RESOURCE_ENUM_DEPENDS)
+    end
+
+    def self.set_priv (hCluster,resource,hash_res={})
+
+      clustername=Mscs::Cluster.name(hCluster)
+      objWMIService=Mscs::Cluster.wmiconnect clustername
+      colItems = objWMIService.ExecQuery("Select * from MSCluster_Resource where name='#{resource}'")
+      colItems.each {|property| 
+        @property=property
+        @res_type=property.type
+      }
+
+      case @res_type
+      when "IP Address"
+        hash_res.has_key?(:enabledhcp) or raise 'enabledhcp needs 0 or 1 (static 0 or dhcp 1)'
+        hash_res.has_key?(:address) or raise 'ipaddr needed'
+        hash_res.has_key?(:subnetmask) or raise 'subnetmask needed'
+        hash_res.has_key?(:network) or raise 'network needed'
+        hash_res.has_key?(:enablenetbios) or raise 'enablenetbios needed'
+        @property.PrivateProperties.Properties_.item(:enabledhcp.to_s).value = hash_res[:enabledhcp]
+
+      when "Network Name"
+        hash_res.has_key?(:name) or raise 'network name must have name'
+        hash_res.has_key?(:remappipenames) or raise 'remappipenames'
+      when "File Server"
+        hash_res.has_key?(:name) or raise 'name needed'
+        hash_res.has_key?(:path) or raise 'path needed'
+        hash_res.has_key?(:sharename) or raise 'sharename needed'
+        hash_res.has_key?(:remark) or raise 'remark needed'
+        hash_res.has_key?(:sharesubdirs) or raise 'sharesubdirs needed'
+      when "Generic Service"
+        hash_res.has_key?(:servicename) or raise 'serviceName needed'
+        hash_res.has_key?(:startupparameters) or raise 'startupParameters needed'
+        hash_res.has_key?(:sharename) or raise 'shareName needed'
+      when "Physical Disk"
+        hash_res.has_key?(:signature) or raise 'signature needed'
+        hash_res.has_key?(:skipchkdsk) or raise 'skipchkdsk needed'
+        hash_res.has_key?(:conditionalmount) or raise 'conditionalmount needed'
+      when "Generic Application"
+        hash_res.has_key?(:commandline) or raise 'commandline needed'
+        hash_res.has_key?(:currentdirectory) or raise 'currentdirectory needed'
+        hash_res.has_key?(:interactwithdesktop) or raise 'interactwithdesktop needed'
+        hash_res.has_key?(:usenetworkname) or raise 'usenetworkname needed'
+      end #case
+
+      hash_res.each do |key, value| key!= :enabledhcp
+        key=key.to_s
+        @property.PrivateProperties.Properties_.item(key).value = value
+      end
+
+      @property.Put_()
+      @property = nil
+    end
+
+    def self.query_priv (hCluster,resource,priv_array)
+      res_privprop= {}
+      size="0" * 260
+      chrs = (0.chr * 1024)
+      buffer1=utf8_to_utf16le(chrs)
+      buffer2=utf8_to_utf16le(chrs)
+      hResource=Mscs::Cluster.open('Resource', resource, hCluster)
+      Functions::ClusterResourceControl.call(hResource, 0, Constants::CLUSCTL_RESOURCE_GET_PRIVATE_PROPERTIES, 0, 0, buffer1, 4096, size)
+      size = size.unpack('L')
+
+      priv_array.each { |item| 
+        ptr = 0.chr * 4
+        res=Functions::ResUtilFindSzProperty.call(buffer1, size[0], utf8_to_utf16le(item), ptr)
+        lstrcpyW = Win32API.new('kernel32','lstrcpyW',['P','L'],'P')
+        lstrcpyW.call(buffer2, ptr.unpack('L')[0])
+        value = (utf16le_to_usascii(buffer2)).strip
+        attrib = item.to_sym
+        res_privprop[attrib] = value
+        buffer2=utf8_to_utf16le(chrs)
+      }
+      return res_privprop
+    end
+
+    class Dependency
+      def self.add(hCluster, res_name, dependson)
+        hres_name=Mscs::Cluster.open('Resource', res_name, hCluster)
+        hdependson=Mscs::Cluster.open('Resource', dependson, hCluster)
+
+        if Functions::CanResourceBeDependent.call(hres_name, hdependson)
+          Functions::AddClusterResourceDependency.call(hres_name, hdependson)
+        else
+          raise_error #not sure what I want to do here yet
+        end #if
+      end #add
+
+      def self.remove(hCluster, res_name, dependson)
+          hres_name=Mscs::Cluster.open('Resource', res_name, hCluster)
+          hdependson=Mscs::Cluster.open('Resource', dependson, hCluster)
+
+          #need if it is already dependendent) check
+          Functions::RemoveClusterResourceDependency.call(hres_name, hdependson)
+      end #remove
+    end #dependency
+  end
 end
