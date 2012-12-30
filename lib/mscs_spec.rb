@@ -97,3 +97,130 @@ describe "cluster_group" do
     end
   end
 end
+
+describe "cluster resource" do
+  context "when clustername is #{cluster_name}" do
+    before :all do
+      $opensesame=Mscs::Cluster.open('Cluster',server)
+      Mscs::Group.add($opensesame, cluster_newgroup)
+    end
+    it "creates a cluster resource" do
+      Mscs::Resource.add($opensesame, cluster_newres1, 'IP Address', cluster_newgroup)
+      #hack #2
+      $cluster = WIN32OLE.new('MSCluster.Cluster')
+      $cluster.open(server)
+      $cluster.resources.item(cluster_newres1).Name.should eq(cluster_newres1)
+    end
+    it "query a specific resource" do
+      resquery=Mscs::Resource.query($opensesame, cluster_existingresource)
+      resquery.should be_a_kind_of(Array)
+      resquery.should include(cluster_existingresourceip)
+    end
+    it "deletes the resource just created specific resource" do
+      removal=Mscs::Resource.remove($opensesame,cluster_newres1)
+      removal.should eq(0)
+    end
+  end
+end
+
+describe "cluster resource property setting" do
+  context "when clustername is #{cluster_name}" do
+    before :all do 
+      $opensesame=Mscs::Cluster.open('Cluster',server)
+      Mscs::Group.add($opensesame, cluster_newgroup)
+      Mscs::Resource.add($opensesame, cluster_newres1, 'IP Address', cluster_newgroup)
+    end
+    after :all do
+      removal=Mscs::Resource.remove($opensesame,cluster_newres1)
+      removal=Mscs::Group.remove($opensesame,cluster_newgroup)
+    end
+    
+    it "set_priv requires minimum parameters for each type" do
+      myarray = []
+      wrong1={
+        :enableddhcp    => 0, #should be enabledhcp
+        :address       => '30.3.4.42',
+        :subnetmask    => '255.255.255.0',
+        :network       => 'Cluster Network 1',
+        :enablenetbios => 0
+        }
+      wrong2={
+        :enabledhcp    => 0,
+        :adddress       => '30.3.4.42', #should be address
+        :subnetmask    => '255.255.255.0',
+        :network       => 'Cluster Network 1',
+        :enablenetbios => 0
+      }
+      wrong3={
+        :enabledhcp    => 0,
+        :address       => '30.3.4.42',
+        :subbnetmask    => '255.255.255.0', #should be subnetmask
+        :network       => 'Cluster Network 1',
+        :enablenetbios => 0
+      }
+      wrong4={
+        :enabledhcp    => 0,
+        :address       => '30.3.4.42',
+        :subnetmask    => '255.255.255.0',
+        :networking    => 'Cluster Network 1', #should be network
+        :enablenetbios => 0
+      }
+      wrong5={
+        :enabledhcp    => 0,
+        :address       => '30.3.4.42',
+        :subnetmask    => '255.255.255.0',
+        :network       => 'Cluster Network 1',
+        :enableetbios => 0 #should be enablenetbios
+      }
+      myarray << wrong1 <<wrong2 << wrong3 << wrong4 << wrong5
+      myarray.each do |hashitem|
+        expect {Mscs::Resource.set_priv($opensesame,cluster_newres1, hashitem)}.to raise_error(RuntimeError)
+      end
+    end
+    
+     it "set_priv on a specific reason" do
+       setpriv=Mscs::Resource.set_priv($opensesame,cluster_newres1, ipres)
+       setpriv.should be nil
+     end
+  end
+end
+
+describe "cluster resource private property query" do
+  context "when clustername is #{cluster_name}" do
+    before :all do
+      $opensesame=Mscs::Cluster.open('Cluster',server)
+    end
+    it "query a specific resource private properties" do
+      resquery=Mscs::Resource.query_priv($opensesame, cluster_existingresourceip, ['Address','SubnetMask'])
+      resquery.should be_a_kind_of(Hash)
+      resquery.should have_key(:Address) 
+      resquery.should have_key(:SubnetMask)
+      resquery[:SubnetMask].should eq(cluster_existingresource_privprop)
+      
+    end
+  end
+end
+
+describe "cluster resource dependency" do
+  context "when clustername is #{cluster_name}" do
+    before :all do
+      $opensesame=Mscs::Cluster.open('Cluster',server)
+      Mscs::Group.add($opensesame, cluster_newgroup)
+      Mscs::Resource.add($opensesame, cluster_newres1, 'IP Address', cluster_newgroup)
+      Mscs::Resource.add($opensesame, cluster_newres2, 'Network Name', cluster_newgroup)
+    end
+    after :all do
+      removal=Mscs::Resource.remove($opensesame,cluster_newres2)
+      removal=Mscs::Resource.remove($opensesame,cluster_newres1)
+      removal=Mscs::Group.remove($opensesame,cluster_newgroup)
+    end
+    it "add cluster resource dependency" do
+      resdependent=Mscs::Resource::Dependency.add($opensesame, cluster_newres2, cluster_newres1)
+      resdependent.should eq(0)
+    end
+    it "add cluster resource dependency" do
+      resdependent=Mscs::Resource::Dependency.remove($opensesame, cluster_newres2, cluster_newres1)
+      resdependent.should eq(0)
+    end
+  end
+end
