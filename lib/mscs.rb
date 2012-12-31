@@ -11,6 +11,20 @@ def utf8_to_utf16le(my_str)
   my_str
 end
 
+def utf16le_to_usascii(my_str)
+  
+  my_str = begin
+    if my_str.respond_to?(:encode)
+      my_str.encode('UTF-8')
+    else
+      require 'iconv'
+      Iconv.conv("US-ASCII", "UTF-16LE", my_str)
+    end
+  end
+  my_str.strip!
+  my_str
+end
+
 #cluster enumeration constants (bitmask)
 CLUSTER_ENUM_NODE=1
 CLUSTER_ENUM_RESTYPE=2
@@ -32,7 +46,6 @@ CLUSTER_RESOURCE_ENUM_PROVIDES=2
 CLUSTER_RESOURCE_ENUM_NODES=4
 
 require "Win32API"
-cluster_name = utf8_to_utf16le("cx-fs01")
 
 OpenCluster = Win32API.new('clusapi','OpenCluster',['P'], 'L')
 ClusterOpenEnum = Win32API.new('clusapi','ClusterOpenEnum',['L','L'], 'L')
@@ -51,19 +64,24 @@ CloseClusterResource = Win32API.new('clusapi','CloseClusterResource',['L'], 'L')
 CloseClusterGroup = Win32API.new('clusapi','CloseClusterGroup',['L'], 'L')
 CloseCluster = Win32API.new('clusapi','CloseCluster',['L'], 'L')
 
-$hCluster = OpenCluster.call(cluster_name)
+def cluster_open(cluster_name)
+  hCluster ||= begin
+    cluster_name = utf8_to_utf16le(cluster_name)
+    hCluster = OpenCluster.call(cluster_name)
+  end
+end
 
-def clusterenumeration(enumerationtype, myhandle, dwtype)
-  enc, chrs = 'UTF-16LE', (0.chr * 260)
-  buffer1  = chrs.encode(enc)
-  buffer2 = chrs.encode(enc)
-  size = '260'.encode(enc)
+def cluster_enumeration(enumerationtype, myhandle, dwtype)
+  chrs = (0.chr * 260)
+  buffer1=utf8_to_utf16le(chrs)
+  buffer2=utf8_to_utf16le(chrs)
+  size=utf8_to_utf16le('260')
   outputlist = []
   handle = myhandle
 
   cluster, cluster_enum = begin
     case enumerationtype
-    when 'Cluster'  ; handle = $hCluster; [ClusterOpenEnum, ClusterEnum]
+    when 'Cluster'  ; [ClusterOpenEnum, ClusterEnum]
     when 'Group'    ; [ClusterGroupOpenEnum, ClusterGroupEnum]
     when 'Resource' ; [ClusterResourceOpenEnum, ClusterResourceEnum]
     end
@@ -74,9 +92,9 @@ def clusterenumeration(enumerationtype, myhandle, dwtype)
   i = 0
   until cluster_enum.call(hEnum, i, buffer1, buffer2, size) !=0
     bufferlength, = size.unpack('L')
-    outputname = buf2.slice(0..bufferlength).encode('US-ASCII').strip
+    outputname = utf16le_to_usascii(buffer2).slice(0..bufferlength).strip
     outputlist << outputname
-    size = '260'.encode(enc)
+    size=utf8_to_utf16le('260')
     i += 1
   end
 
@@ -84,15 +102,15 @@ def clusterenumeration(enumerationtype, myhandle, dwtype)
 end
 
 
-def cluster_group(action, groupname)
+def cluster_group(action, groupname, hCluster)
   groupname = utf8_to_utf16le(groupname)
   case action
     when "add"
-      CreateClusterGroup.call($hCluster,groupname)
+      CreateClusterGroup.call(hCluster,groupname)
     when "remove"
-      DeleteClusterGroup.call(groupname)    
+      DeleteClusterGroup.call(groupname)    # this needs to be the handle of the group not the name. enum groups...
     when "query"
-      ClusterEnumeration('Group',groupname,CLUSTER_GROUP_ENUM_CONTAINS)
+      cluster_enumeration('Cluster',hcluster, CLUSTER_ENUM_GROUP)
     end  
 end
   
@@ -110,7 +128,7 @@ def cluster_res(action, res_name, res_type, res_grp)
     when "remove"
       DeleteClusterResource.call(hRes)    
     when "query"
-      ClusterEnumeration(CLUSTER_ENUM_RESOURCE,groupname,CLUSTER_RESOURCE_ENUM_DEPENDS)
+      Cluster_Enumeration(CLUSTER_ENUM_RESOURCE,groupname,CLUSTER_RESOURCE_ENUM_DEPENDS)
     end
 end
 
