@@ -68,21 +68,24 @@ CloseCluster = Win32API.new('clusapi','CloseCluster',['L'], 'L')
 def clus_open(open_type, open_name, cluster_handle=nil)
   open_name = utf8_to_utf16le(open_name)
  
-  cluster_open, cluster_handle = begin
+  cluster_open = begin
     case open_type
-    when 'Cluster'      ; [OpenCluster]
-    when 'Group'        ; [OpenClusterGroup]
-    when 'Resource'     ; [OpenClusterResource]
-    when 'NetInterface' ; [OpenClusterNetInterface]
-    when 'Network'      ; [OpenClusterNetWork]
-    when 'Node'         ; [OpenClusterNode]
+    when 'Cluster'      ; OpenCluster
+    when 'Group'        ; OpenClusterGroup
+    when 'Resource'     ; OpenClusterResource
+    when 'NetInterface' ; OpenClusterNetInterface
+    when 'Network'      ; OpenClusterNetWork
+    when 'Node'         ; OpenClusterNode
     end
+    
   end
+ 
+  # only 1 arg needed for OpenCluster, 2 for the others
+  
+  open_type == 'Cluster' ? (handle = cluster_open.call(open_name)) : (handle = cluster_open.call(cluster_handle,open_name))
 
-    if open_type == 'Cluster' 
-    return cluster_open.call(open_name) else
-    return cluster_open.call(cluster_handle,open_name)
-    end
+  return handle
+  
 end
 
 def clus_enumeration(enumerationtype, myhandle, dwtype)
@@ -117,12 +120,15 @@ end
 
 
 def clus_group(action, groupname, hCluster)
-  groupname = utf8_to_utf16le(groupname)
+  
+  
   case action
     when "add"
+      groupname = utf8_to_utf16le(groupname)
       CreateClusterGroup.call(hCluster,groupname)
     when "remove"
-      DeleteClusterGroup.call(groupname)    # this needs to be the handle of the group not the name. enum groups...
+      hGroup=clus_open('Group', groupname, hCluster)
+      DeleteClusterGroup.call(hGroup)    # this needs to be the handle of the group not the name. enum groups...
     when "query"
       cluster_enumeration('Cluster',hcluster, CLUSTER_ENUM_GROUP)
     end  
