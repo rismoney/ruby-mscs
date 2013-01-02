@@ -48,6 +48,7 @@ CLUSTER_RESOURCE_ENUM_NODES=4
 require "Win32API"
 
 OpenCluster = Win32API.new('clusapi','OpenCluster',['P'], 'L')
+OpenClusterGroup = Win32API.new('clusapi','OpenClusterGroup',['P','P'], 'L')
 ClusterOpenEnum = Win32API.new('clusapi','ClusterOpenEnum',['L','L'], 'L')
 ClusterEnum = Win32API.new('clusapi','ClusterEnum',['L','L','P','P','P'], 'L')
 ClusterGroupOpenEnum = Win32API.new('clusapi','ClusterGroupOpenEnum',['L','L'], 'L')
@@ -64,14 +65,27 @@ CloseClusterResource = Win32API.new('clusapi','CloseClusterResource',['L'], 'L')
 CloseClusterGroup = Win32API.new('clusapi','CloseClusterGroup',['L'], 'L')
 CloseCluster = Win32API.new('clusapi','CloseCluster',['L'], 'L')
 
-def cluster_open(cluster_name)
-  hCluster ||= begin
-    cluster_name = utf8_to_utf16le(cluster_name)
-    hCluster = OpenCluster.call(cluster_name)
+def clus_open(open_type, open_name, cluster_handle=nil)
+  open_name = utf8_to_utf16le(open_name)
+ 
+  cluster_open, cluster_handle = begin
+    case open_type
+    when 'Cluster'      ; [OpenCluster]
+    when 'Group'        ; [OpenClusterGroup]
+    when 'Resource'     ; [OpenClusterResource]
+    when 'NetInterface' ; [OpenClusterNetInterface]
+    when 'Network'      ; [OpenClusterNetWork]
+    when 'Node'         ; [OpenClusterNode]
+    end
   end
+
+    if open_type == 'Cluster' 
+    return cluster_open.call(open_name) else
+    return cluster_open.call(cluster_handle,open_name)
+    end
 end
 
-def cluster_enumeration(enumerationtype, myhandle, dwtype)
+def clus_enumeration(enumerationtype, myhandle, dwtype)
   chrs = (0.chr * 260)
   buffer1=utf8_to_utf16le(chrs)
   buffer2=utf8_to_utf16le(chrs)
@@ -79,7 +93,7 @@ def cluster_enumeration(enumerationtype, myhandle, dwtype)
   outputlist = []
   handle = myhandle
 
-  cluster, cluster_enum = begin
+  cluster_open_enum, cluster_enum = begin
     case enumerationtype
     when 'Cluster'  ; [ClusterOpenEnum, ClusterEnum]
     when 'Group'    ; [ClusterGroupOpenEnum, ClusterGroupEnum]
@@ -87,7 +101,7 @@ def cluster_enumeration(enumerationtype, myhandle, dwtype)
     end
   end
   
-  hEnum = cluster.call(handle, dwtype)
+  hEnum = cluster_open_enum.call(handle, dwtype)
 
   i = 0
   until cluster_enum.call(hEnum, i, buffer1, buffer2, size) !=0
@@ -102,7 +116,7 @@ def cluster_enumeration(enumerationtype, myhandle, dwtype)
 end
 
 
-def cluster_group(action, groupname, hCluster)
+def clus_group(action, groupname, hCluster)
   groupname = utf8_to_utf16le(groupname)
   case action
     when "add"
