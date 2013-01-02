@@ -77,13 +77,10 @@ def clus_open(open_type, open_name, cluster_handle=nil)
     when 'Network'      ; OpenClusterNetWork
     when 'Node'         ; OpenClusterNode
     end
-    
   end
  
   # only 1 arg needed for OpenCluster, 2 for the others
-  
   open_type == 'Cluster' ? (handle = cluster_open.call(open_name)) : (handle = cluster_open.call(cluster_handle,open_name))
-
   return handle
   
 end
@@ -120,8 +117,6 @@ end
 
 
 def clus_group(action, groupname, hCluster)
-  
-  
   case action
     when "add"
       groupname = utf8_to_utf16le(groupname)
@@ -130,7 +125,9 @@ def clus_group(action, groupname, hCluster)
       hGroup=clus_open('Group', groupname, hCluster)
       DeleteClusterGroup.call(hGroup)    # this needs to be the handle of the group not the name. enum groups...
     when "query"
-      cluster_enumeration('Cluster',hcluster, CLUSTER_ENUM_GROUP)
+      #groupname = utf8_to_utf16le(groupname)
+      hGroup=clus_open('Group', groupname, hCluster)
+      clus_enumeration('Group',hGroup, CLUSTER_GROUP_ENUM_CONTAINS)
     end  
 end
   
