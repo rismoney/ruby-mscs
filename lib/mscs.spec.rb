@@ -19,7 +19,7 @@ cluster.open(cluname)
   
 describe "cluster_open" do
   context "when clustername is #{cluname}" do
-    opensesame=cluster_open(cluname)
+    opensesame=clus_open('Cluster',cluname)
       it "should be a fixnum" do 
         opensesame.should be_a_kind_of(Fixnum)
       end
@@ -27,7 +27,7 @@ describe "cluster_open" do
         opensesame.should be > 0
       end
       it do 
-        expect(cluster_open('nonexistant')).to eq 0
+        expect(clus_open('Cluster','nonexistant')).to eq 0
       end
   end
 end
@@ -35,9 +35,9 @@ end
 describe "cluster_enumeration" do
   context "when clustername is #{cluname}" do
     before :all do
-      $opensesame=cluster_open(cluname)
-      $enumgroup=cluster_enumeration('Cluster',$opensesame, 8)
-      $enumnodes=cluster_enumeration('Cluster',$opensesame, 1)
+      $opensesame=clus_open('Cluster',cluname)
+      $enumgroup=clus_enumeration('Cluster',$opensesame, 8)
+      $enumnodes=clus_enumeration('Cluster',$opensesame, 1)
     end
     it "should query all the cluster groups cluster and return array" do 
       $enumgroup.should be_a_kind_of(Array)
@@ -58,11 +58,11 @@ describe "cluster_group" do
         # cluster.resourcegroups.deleteitem(myname)
       # end
       it "creates a cluster resource group" do
-        cluster_group('add',newfakegroup, $opensesame)
+        clus_group('add',newfakegroup, $opensesame)
         cluster.resourcegroups.item(newfakegroup).Name.should eq(newfakegroup)
       end
       it "deletes a cluster resource group" do
-        cluster_group('remove',newfakegroup, $opensesame)
+        clus_group('remove',newfakegroup, $opensesame)
         expect {cluster.resourcegroups.item(newfakegroup)}.to raise_error
       end      
     end
