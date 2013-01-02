@@ -8,6 +8,7 @@ cluname = 'cx-fs01'
 myname= 'deleteme'
 existingnode='cc-fs01a'
 existinggroup='Cluster Group'
+existingresource='Cluster Name'
 newfakegroup='blah'
 
 # the rspec purposely uses win32ole com to validate the settings
@@ -60,6 +61,12 @@ describe "cluster_group" do
       it "creates a cluster resource group" do
         clus_group('add',newfakegroup, $opensesame)
         cluster.resourcegroups.item(newfakegroup).Name.should eq(newfakegroup)
+      end
+      it "query a specific resource group" do
+        groupquery=clus_group('query',existinggroup, $opensesame)
+        groupquery.should be_a_kind_of(Array)
+        groupquery.should include(existingresource)
+        
       end
       it "deletes a cluster resource group" do
         clus_group('remove',newfakegroup, $opensesame)
