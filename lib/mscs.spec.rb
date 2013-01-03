@@ -2,7 +2,7 @@
 
 
 require 'win32ole'
-require 'mscs'
+require './mscs'
 
 cluname = 'cx-fs01'
 myname= 'deleteme'
@@ -59,17 +59,17 @@ describe "cluster_group" do
         # cluster.resourcegroups.deleteitem(myname)
       # end
       it "creates a cluster resource group" do
-        clus_group('add',newfakegroup, $opensesame)
+        clus_group('add', $opensesame, newfakegroup)
         cluster.resourcegroups.item(newfakegroup).Name.should eq(newfakegroup)
       end
       it "query a specific resource group" do
-        groupquery=clus_group('query',existinggroup, $opensesame)
+        groupquery=clus_group('query', $opensesame, existinggroup)
         groupquery.should be_a_kind_of(Array)
         groupquery.should include(existingresource)
         
       end
       it "deletes a cluster resource group" do
-        clus_group('remove',newfakegroup, $opensesame)
+        clus_group('remove', $opensesame,newfakegroup)
         expect {cluster.resourcegroups.item(newfakegroup)}.to raise_error
       end      
     end
