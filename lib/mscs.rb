@@ -135,7 +135,7 @@ require "Win32API"
 #opens
 OpenCluster = Win32API.new('clusapi','OpenCluster',['P'], 'L')
 OpenClusterGroup = Win32API.new('clusapi','OpenClusterGroup',['L','P'], 'L')
-OpenClusterResource = Win32API.new('clusapi','OpenClusterResource',['P','P'], 'L')
+OpenClusterResource = Win32API.new('clusapi','OpenClusterResource',['L','P'], 'L')
 
 #closes
 CloseClusterResource = Win32API.new('clusapi','CloseClusterResource',['L'], 'L')
@@ -162,6 +162,9 @@ OfflineClusterGroup = Win32API.new('clusapi','OfflineClusterGroup',['L'], 'L')
 
 #resource control
 ClusterResourceControl = Win32API.new('clusapi','ClusterResourceControl',['L','L','L','P','L','P','L','P'], 'L')
+
+#i didn't even know about these! was gonna parse this nonsense myself :)
+ResUtilFindSzProperty = Win32API.new('resutils','ResUtilFindSzProperty',['P','L','P','P'], 'L')
 
 
 
@@ -246,7 +249,7 @@ def clus_res(action, hCluster, res_name, res_type, res_grp)
       
       res_name = utf8_to_utf16le(res_name)
       res_type = utf8_to_utf16le(res_type)
-      
+ 
       hGroup=clus_open('Group', res_grp, hCluster)
       hRes = CreateClusterResource.call(hGroup,res_name,res_type,0)
     when "remove"
@@ -260,9 +263,6 @@ def clus_res(action, hCluster, res_name, res_type, res_grp)
       clus_enumeration('Resource', hResource, CLUSTER_RESOURCE_ENUM_DEPENDS)
     end
 end
-
-#btw - all the shit below is garbage ole shit
-
 
 def cluster_res_ip_props (res_name, res_grp, ip_addr, ip_subnetmask, ip_network, ip_netbios='1')
   puts "#{res_name}"
@@ -323,28 +323,3 @@ def cluster_mod_dependency (action, res_name, dependencyname)
   resource = $hCluster.Resources.item(res_name)
   dependency = $hCluster.Resources.item(dependencyname)
 
-case action
-  when "add"
-    if resource.CanResourceBeDependent(dependency)
-      resource.Dependencies.AddItem(dependency)
-    else
-      raise_error #not sure what I want to do here yet
-    end
-  when "remove"
-    #need if it is already dependendent) check
-    resource.Dependencies.RemoveItem(dependency)
-  end
-end
-
-#def cluster_res_name_dependencies (res_name, *args)
-#cluster_group('add','Testing')
-#cluster_res('add','ip2','IP Address','Testing')
-#cluster_res('remove','ip2','IP Address','Testing')
-#cluster_res_ip_props('myresource',"30.3.4.156","255.255.255.0","30.3.4.0",'1')
-#cluster_res_ip_props ('myresource', 'mygroup', '30.3.4.156', '255.255.255.0', 'C_MGMT-304', 1)
-
-#varPropNames = Array( "Address", "SubnetMask", "Network", "EnableNetBIOS" )
-
-  #
-  # 
-  # gimme the ole methods - puts cluster.ole_methods
