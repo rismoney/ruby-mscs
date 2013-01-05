@@ -43,6 +43,9 @@ AddClusterResourceDependency = Win32API.new('clusapi','AddClusterResourceDepende
 CanResourceBeDependent = Win32API.new('clusapi','CanResourceBeDependent',['P','P'], 'L')
 RemoveClusterResourceDependency = Win32API.new('clusapi','RemoveClusterResourceDependency',['P','P'], 'L')
 
+#utility function for pointer mgmt
+lstrcpyW = Win32API.new('kernel32','lstrcpyW',['P','L'],'P')
+
 def clus_open(open_type, open_name, cluster_handle=nil)
   open_name = utf8_to_utf16le(open_name)
  
@@ -80,7 +83,7 @@ def clus_enumeration(enumerationtype, myhandle, dwtype)
     when 'Resource' ; [ClusterResourceOpenEnum, ClusterResourceEnum]
     end
   end
-  
+
   hEnum = cluster_open_enum.call(handle, dwtype)
 
   i = 0
@@ -103,14 +106,10 @@ def clus_group(action, hCluster, res_grp)
       res_grp = utf8_to_utf16le(res_grp)
       CreateClusterGroup.call(hCluster,res_grp)
     when "remove"
-      
       hGroup=clus_open('Group', res_grp, hCluster)
       DeleteClusterGroup.call(hGroup)    # this needs to be the handle of the group not the name. enum groups...
     when "query"
-      
-
       hGroup=clus_open('Group', res_grp, hCluster)
-      
       clus_enumeration('Group',hGroup, CLUSTER_GROUP_ENUM_CONTAINS)
   end  
 end
@@ -140,16 +139,17 @@ def clus_res(action, hCluster, res_name, res_type, res_grp)
 end
 
 
-def cluster_res_props (cluster,resource,hash_res={})
+def cluster_res_props (action,cluster,resource,hash_res={})
 
-  # this is currently using OLE for ease of use - it will be deprecated after Win2012
-  # this was a shortcut to using property lists via win32api/ffi
-  # $cluster.ole_methods.collect!{ |e| e.to_s }.sort
+  case action
+  when "add"
+      # add is currently using OLE for ease of use - it will be deprecated after Win2012
+      # this was a shortcut to using property lists via win32api/ffi
+      # $cluster.ole_methods.collect!{ |e| e.to_s }.sort
   
-  hcluster = WIN32OLE.new('MSCluster.Cluster')
-  hcluster.open(cluster)
-  
-  case hcluster.Resources.item(resource).Typename
+    hcluster = WIN32OLE.new('MSCluster.Cluster')
+    hcluster.open(cluster)
+    case hcluster.Resources.item(resource).Typename
     when "IP Address"
       hash_res.has_key?(:enabledhcp) or raise 'enabledhcp needs 0 or 1 (static 0 or dhcp 1)'
       hash_res.has_key?(:address) or raise 'ipaddr needed'
@@ -179,26 +179,42 @@ def cluster_res_props (cluster,resource,hash_res={})
       hash_res.has_key?(:currentdirectory) or raise 'currentdirectory needed'
       hash_res.has_key?(:interactwithdesktop) or raise 'interactwithdesktop needed'
       hash_res.has_key?(:usenetworkname) or raise 'usenetworkname needed'
-  end
-  puts hash_res
-  
-  hash_res.each do |key, value| key!= :enabledhcp
-    key=key.to_s
-    hcluster.Resources.item(resource).PrivateProperties.item(key).Value = value
-  end
-  
-  hcluster.Resources.item(resource).PrivateProperties.savechanges
-  hcluster = nil
+    end
 
+    hash_res.each do |key, value| key!= :enabledhcp
+      key=key.to_s
+      hcluster.Resources.item(resource).PrivateProperties.item(key).Value = value
+    end
+
+    hcluster.Resources.item(resource).PrivateProperties.savechanges
+    hcluster = nil
+
+  when "query"
+    output=[]
+    size="0" * 260
+    chrs = (0.chr * 1024)
+    buffer1=utf8_to_utf16le(chrs)
+    buffer2=utf8_to_utf16le(chrs)
+    hResource=clus_open('Resource', resource, hcluster)
+    ClusterResourceControl.call(hResource, 0, CLUSCTL_RESOURCE_GET_PRIVATE_PROPERTIES, 0, 0, buffer1, 4096, size)
+    size = size.unpack('L')
+    hash_res.each do |key, value| 
+      key=key.to_s
+      ptr = 0.chr * 4
+      res=ResUtilFindSzProperty.call(buffer1, size[0], utf8_to_utf16le("Address"), ptr)
+      lstrcpyW.call(buffer2, ptr.unpack('L')[0])
+      outputname = utf16le_to_usascii(buffer1).slice(0..sizep).strip
+      outputlist << outputname
+    end
+  end
 end  
-  
-  
+
 def cluster_mod_dependency (action, hCluster, res_name, dependendson)
   hres_name=clus_open('Resource', res_name, hCluster)
   hdependendson=clus_open('Resource', res_name, hCluster)
   case action
     when "add"
-    
+
       if CanResourceBeDependent(hres_name, hdependendson)
         AddClusterResourceDependency(hres_name, hdependendson)
       else
