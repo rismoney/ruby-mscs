@@ -62,7 +62,6 @@ def clus_open(open_type, open_name, cluster_handle=nil)
  
   # only 1 arg needed for OpenCluster, 2 for the others
   
-  
   open_type == 'Cluster' ? (handle = cluster_open.call(open_name)) : (handle = cluster_open.call(cluster_handle,open_name))
   return handle
   
@@ -99,53 +98,48 @@ def clus_enumeration(enumerationtype, myhandle, dwtype)
 end
 
 
-def clus_group(action, hCluster, res_grp)
-
-  case action
-    when "add"
-      res_grp = utf8_to_utf16le(res_grp)
-      CreateClusterGroup.call(hCluster,res_grp)
-    when "remove"
-      hGroup=clus_open('Group', res_grp, hCluster)
-      DeleteClusterGroup.call(hGroup)    # this needs to be the handle of the group not the name. enum groups...
-    when "query"
-      hGroup=clus_open('Group', res_grp, hCluster)
-      clus_enumeration('Group',hGroup, CLUSTER_GROUP_ENUM_CONTAINS)
-  end  
+def clus_group_add(hCluster, res_grp)
+  res_grp = utf8_to_utf16le(res_grp)
+  CreateClusterGroup.call(hCluster,res_grp)
 end
+
+def clus_group_remove(hCluster, res_grp)
+  hGroup=clus_open('Group', res_grp, hCluster)
+  DeleteClusterGroup.call(hGroup)    # this needs to be the handle of the group not the name. enum groups...
+end
+
+def clus_group_query(hCluster, res_grp)
+  hGroup=clus_open('Group', res_grp, hCluster)
+  clus_enumeration('Group',hGroup, CLUSTER_GROUP_ENUM_CONTAINS)
+end  
+
   
-def clus_res(action, hCluster, res_name, res_type, res_grp)
+def clus_res_add(hCluster, res_name, res_type, res_grp)
+  res_type = 'IP Address' if res_type =~ /ip/i
+  res_type = 'Network Name' if ['nn', 'networkname'].include?(res_type.downcase)
+  res_name = utf8_to_utf16le(res_name)
+  res_type = utf8_to_utf16le(res_type)
+  hGroup=clus_open('Group', res_grp, hCluster)
+  hRes = CreateClusterResource.call(hGroup,res_name,res_type,0)
+end
 
-  case action
-    when "add"
-      res_type = 'IP Address' if res_type =~ /ip/i
-      res_type = 'Network Name' if ['nn', 'networkname'].include?(res_type.downcase)
-      
-      res_name = utf8_to_utf16le(res_name)
-      res_type = utf8_to_utf16le(res_type)
- 
-      hGroup=clus_open('Group', res_grp, hCluster)
-      hRes = CreateClusterResource.call(hGroup,res_name,res_type,0)
-    when "remove"
-      hResource=clus_open('Resource', res_name, hCluster)
-      DeleteClusterResource.call(hResource)
-    when "query"
-    
-      hResource=clus_open('Resource', res_name, hCluster)
-      
-      # if hResource is a Fix >0 then run this, otherwise irb shits the bed.  we should probably fix all the other calls after opens
-      clus_enumeration('Resource', hResource, CLUSTER_RESOURCE_ENUM_DEPENDS)
-    end
+def clus_res_remove(hCluster, res_name, res_type, res_grp)
+  hResource=clus_open('Resource', res_name, hCluster)
+  DeleteClusterResource.call(hResource)
+end
+
+def clus_res_query(hCluster, res_name)
+  hResource=clus_open('Resource', res_name, hCluster)
+  # if hResource is a Fix >0 then run this, otherwise irb shits the bed.  we should probably fix all the other calls after opens
+  clus_enumeration('Resource', hResource, CLUSTER_RESOURCE_ENUM_DEPENDS)
 end
 
 
-def cluster_res_props (action,cluster,resource,hash_res={})
+def cluster_resprops_add (action,cluster,resource,hash_res={})
 
-  case action
-  when "add"
-      # add is currently using OLE for ease of use - it will be deprecated after Win2012
-      # this was a shortcut to using property lists via win32api/ffi
-      # $cluster.ole_methods.collect!{ |e| e.to_s }.sort
+  # add is currently using OLE for ease of use - it will be deprecated after Win2012
+  # this was a shortcut to using property lists via win32api/ffi
+  # $cluster.ole_methods.collect!{ |e| e.to_s }.sort
   
     hcluster = WIN32OLE.new('MSCluster.Cluster')
     hcluster.open(cluster)
@@ -188,40 +182,43 @@ def cluster_res_props (action,cluster,resource,hash_res={})
 
     hcluster.Resources.item(resource).PrivateProperties.savechanges
     hcluster = nil
+end
 
-  when "query"
-    output=[]
-    size="0" * 260
-    chrs = (0.chr * 1024)
-    buffer1=utf8_to_utf16le(chrs)
-    buffer2=utf8_to_utf16le(chrs)
-    hResource=clus_open('Resource', resource, hcluster)
-    ClusterResourceControl.call(hResource, 0, CLUSCTL_RESOURCE_GET_PRIVATE_PROPERTIES, 0, 0, buffer1, 4096, size)
-    size = size.unpack('L')
-    hash_res.each do |key, value| 
-      key=key.to_s
-      ptr = 0.chr * 4
-      res=ResUtilFindSzProperty.call(buffer1, size[0], utf8_to_utf16le("Address"), ptr)
-      lstrcpyW.call(buffer2, ptr.unpack('L')[0])
-      outputname = utf16le_to_usascii(buffer1).slice(0..sizep).strip
-      outputlist << outputname
-    end
+def cluster_resprops_query (hCluster,resource,hash_res={})
+  output=[]
+  size="0" * 260
+  chrs = (0.chr * 1024)
+  buffer1=utf8_to_utf16le(chrs)
+  buffer2=utf8_to_utf16le(chrs)
+  hResource=clus_open('Resource', resource, hcluster)
+  ClusterResourceControl.call(hResource, 0, CLUSCTL_RESOURCE_GET_PRIVATE_PROPERTIES, 0, 0, buffer1, 4096, size)
+  size = size.unpack('L')
+  hash_res.each do |key, value| 
+    key=key.to_s
+    ptr = 0.chr * 4
+    res=ResUtilFindSzProperty.call(buffer1, size[0], utf8_to_utf16le("Address"), ptr)
+    lstrcpyW.call(buffer2, ptr.unpack('L')[0])
+    outputname = utf16le_to_usascii(buffer1).slice(0..sizep).strip
+    outputlist << outputname
   end
 end  
 
-def cluster_mod_dependency (action, hCluster, res_name, dependendson)
+def cluster_resdependency_add (hCluster, res_name, dependendson)
   hres_name=clus_open('Resource', res_name, hCluster)
   hdependendson=clus_open('Resource', res_name, hCluster)
-  case action
-    when "add"
 
-      if CanResourceBeDependent(hres_name, hdependendson)
-        AddClusterResourceDependency(hres_name, hdependendson)
-      else
-        raise_error #not sure what I want to do here yet
-      end
-    when "remove"
-      #need if it is already dependendent) check
-      RemoveClusterResourceDependency(hres_name, hdependendson)
+  if CanResourceBeDependent(hres_name, hdependendson)
+    AddClusterResourceDependency(hres_name, hdependendson)
+  else
+    raise_error #not sure what I want to do here yet
   end
+end  
+      
+def cluster_resdependency_remove (hCluster, res_name, dependendson)
+    hres_name=clus_open('Resource', res_name, hCluster)
+    hdependendson=clus_open('Resource', res_name, hCluster)
+
+    #need if it is already dependendent) check
+    RemoveClusterResourceDependency(hres_name, hdependendson)
 end
+
