@@ -38,7 +38,10 @@ ClusterResourceControl = Win32API.new('clusapi','ClusterResourceControl',['L','L
 #i didn't even know about these! was gonna parse this nonsense myself :)
 ResUtilFindSzProperty = Win32API.new('resutils','ResUtilFindSzProperty',['P','L','P','P'], 'L')
 
-
+# dependency mgmt
+AddClusterResourceDependency = Win32API.new('clusapi','AddClusterResourceDependency',['P','P'], 'L')
+CanResourceBeDependent = Win32API.new('clusapi','CanResourceBeDependent',['P','P'], 'L')
+RemoveClusterResourceDependency = Win32API.new('clusapi','RemoveClusterResourceDependency',['P','P'], 'L')
 
 def clus_open(open_type, open_name, cluster_handle=nil)
   open_name = utf8_to_utf16le(open_name)
@@ -190,19 +193,19 @@ def cluster_res_props (cluster,resource,hash_res={})
 end  
   
   
-def cluster_mod_dependency (action, res_name, dependencyname)
-  resource = $hCluster.Resources.item(res_name)
-  dependency = $hCluster.Resources.item(dependencyname)
-
+def cluster_mod_dependency (action, hCluster, res_name, dependendson)
+  hres_name=clus_open('Resource', res_name, hCluster)
+  hdependendson=clus_open('Resource', res_name, hCluster)
   case action
     when "add"
-      if resource.CanResourceBeDependent(dependency)
-        resource.Dependencies.AddItem(dependency)
+    
+      if CanResourceBeDependent(hres_name, hdependendson)
+        AddClusterResourceDependency(hres_name, hdependendson)
       else
         raise_error #not sure what I want to do here yet
       end
     when "remove"
       #need if it is already dependendent) check
-      resource.Dependencies.RemoveItem(dependency)
+      RemoveClusterResourceDependency(hres_name, hdependendson)
   end
 end
