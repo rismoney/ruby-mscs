@@ -22,7 +22,7 @@ cluster.open(cluname)
   
 describe "cluster_open" do
   context "when clustername is #{cluname}" do
-    opensesame=Mscs.open('Cluster',cluname)
+    opensesame=Mscs::Cluster.open('Cluster',cluname)
       it "should be a fixnum" do 
         opensesame.should be_a_kind_of(Fixnum)
       end
@@ -30,7 +30,7 @@ describe "cluster_open" do
         opensesame.should be > 0
       end
       it do 
-        expect(Mscs.open('Cluster','nonexistant')).to eq 0
+        expect(Mscs::Cluster.open('Cluster','nonexistant')).to eq 0
       end
   end
 end
@@ -38,9 +38,9 @@ end
 describe "cluster_enumeration" do
   context "when clustername is #{cluname}" do
     before :all do
-      $opensesame=Mscs.open('Cluster',cluname)
-      $enumgroup=Mscs.enumerate('Cluster',$opensesame, 8)
-      $enumnodes=Mscs.enumerate('Cluster',$opensesame, 1)
+      $opensesame=Mscs::Cluster.open('Cluster',cluname)
+      $enumgroup=Mscs::Cluster.enumerate('Cluster',$opensesame, 8)
+      $enumnodes=Mscs::Cluster.enumerate('Cluster',$opensesame, 1)
     end
     it "should query all the cluster groups cluster and return array" do 
       $enumgroup.should be_a_kind_of(Array)
@@ -57,20 +57,20 @@ end
 describe "cluster_group" do
   context "when clustername is #{cluname}" do
     before :all do
-      $opensesame=Mscs.open('Cluster',cluname)
+      $opensesame=Mscs::Cluster.open('Cluster',cluname)
     end
     it "creates a cluster resource group" do
-      Mscs::group::add($opensesame, newfakegroup)
+      Mscs::Group.add($opensesame, newfakegroup)
       cluster.resourcegroups.item(newfakegroup).Name.should eq(newfakegroup)
     end
     it "query a specific resource group" do
-      groupquery=Mscs.group_query($opensesame, existinggroup)
+      groupquery=Mscs::Group.query($opensesame, existinggroup)
       groupquery.should be_a_kind_of(Array)
       groupquery.should include(existingresource)
       
     end
     it "deletes a cluster resource group" do
-      Mscs.group_remove($opensesame,newfakegroup)
+      Mscs::Group.remove($opensesame,newfakegroup)
       expect {cluster.resourcegroups.item(newfakegroup)}.to raise_error
     end
   end
@@ -79,21 +79,21 @@ end
 describe "cluster resource" do
   context "when clustername is #{cluname}" do
     before :all do
-      $opensesame=Mscs.open('Cluster',cluname)
-      Mscs.group_add($opensesame, newfakegroup)
+      $opensesame=Mscs::Cluster.open('Cluster',cluname)
+      Mscs::Group.add($opensesame, newfakegroup)
     end
   it "creates a cluster resource" do
      
-      Mscs.resource_add($opensesame, newfakeresource, 'IP Address', newfakegroup)
+      Mscs::Resource.add($opensesame, newfakeresource, 'IP Address', newfakegroup)
       cluster.resources.item(newfakeresource).Name.should eq(newfakeresource)
     end
     it "query a specific resource" do
-      resquery=Mscs.resource_query($opensesame, existingresource)
+      resquery=Mscs::Resource.query($opensesame, existingresource)
       resquery.should be_a_kind_of(Array)
       resquery.should include(existingresourceitem)
     end
     it "deletes the resource just created specific resource" do
-      removal=Mscs.resource_remove($opensesame,newfakeresource)
+      removal=Mscs::Resource.remove($opensesame,newfakeresource)
       removal.should eq(0)
     end
   end
