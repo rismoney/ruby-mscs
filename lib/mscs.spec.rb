@@ -9,7 +9,9 @@ myname= 'deleteme'
 existingnode='cc-fs01a'
 existinggroup='Cluster Group'
 existingresource='Cluster Name'
+existingresourceitem='Cluster IP Address'
 newfakegroup='blah'
+newfakeresource='myfakeres'
 
 # the rspec purposely uses win32ole com to validate the settings
 # i use it to avoid api code calls for query.  may change to wmi
@@ -20,7 +22,7 @@ cluster.open(cluname)
   
 describe "cluster_open" do
   context "when clustername is #{cluname}" do
-    opensesame=clus_open('Cluster',cluname)
+    opensesame=Mscs::Cluster.open('Cluster',cluname)
       it "should be a fixnum" do 
         opensesame.should be_a_kind_of(Fixnum)
       end
@@ -28,7 +30,7 @@ describe "cluster_open" do
         opensesame.should be > 0
       end
       it do 
-        expect(clus_open('Cluster','nonexistant')).to eq 0
+        expect(Mscs::Cluster.open('Cluster','nonexistant')).to eq 0
       end
   end
 end
@@ -36,9 +38,9 @@ end
 describe "cluster_enumeration" do
   context "when clustername is #{cluname}" do
     before :all do
-      $opensesame=clus_open('Cluster',cluname)
-      $enumgroup=clus_enumeration('Cluster',$opensesame, 8)
-      $enumnodes=clus_enumeration('Cluster',$opensesame, 1)
+      $opensesame=Mscs::Cluster.open('Cluster',cluname)
+      $enumgroup=Mscs::Cluster.enumerate('Cluster',$opensesame, 8)
+      $enumnodes=Mscs::Cluster.enumerate('Cluster',$opensesame, 1)
     end
     it "should query all the cluster groups cluster and return array" do 
       $enumgroup.should be_a_kind_of(Array)
@@ -54,24 +56,45 @@ end
 
 describe "cluster_group" do
   context "when clustername is #{cluname}" do
-    context "and myname #{myname}" do
-      # after :all do
-        # cluster.resourcegroups.deleteitem(myname)
-      # end
-      it "creates a cluster resource group" do
-        clus_group_add($opensesame, newfakegroup)
-        cluster.resourcegroups.item(newfakegroup).Name.should eq(newfakegroup)
-      end
-      it "query a specific resource group" do
-        groupquery=clus_group_query($opensesame, existinggroup)
-        groupquery.should be_a_kind_of(Array)
-        groupquery.should include(existingresource)
-        
-      end
-      it "deletes a cluster resource group" do
-        clus_group_remove($opensesame,newfakegroup)
-        expect {cluster.resourcegroups.item(newfakegroup)}.to raise_error
-      end      
+    before :all do
+      $opensesame=Mscs::Cluster.open('Cluster',cluname)
+    end
+    it "creates a cluster resource group" do
+      Mscs::Group.add($opensesame, newfakegroup)
+      cluster.resourcegroups.item(newfakegroup).Name.should eq(newfakegroup)
+    end
+    it "query a specific resource group" do
+      groupquery=Mscs::Group.query($opensesame, existinggroup)
+      groupquery.should be_a_kind_of(Array)
+      groupquery.should include(existingresource)
+      
+    end
+    it "deletes a cluster resource group" do
+      Mscs::Group.remove($opensesame,newfakegroup)
+      expect {cluster.resourcegroups.item(newfakegroup)}.to raise_error
+    end
+  end
+end
+
+describe "cluster resource" do
+  context "when clustername is #{cluname}" do
+    before :all do
+      $opensesame=Mscs::Cluster.open('Cluster',cluname)
+      Mscs::Group.add($opensesame, newfakegroup)
+    end
+  it "creates a cluster resource" do
+     
+      Mscs::Resource.add($opensesame, newfakeresource, 'IP Address', newfakegroup)
+      cluster.resources.item(newfakeresource).Name.should eq(newfakeresource)
+    end
+    it "query a specific resource" do
+      resquery=Mscs::Resource.query($opensesame, existingresource)
+      resquery.should be_a_kind_of(Array)
+      resquery.should include(existingresourceitem)
+    end
+    it "deletes the resource just created specific resource" do
+      removal=Mscs::Resource.remove($opensesame,newfakeresource)
+      removal.should eq(0)
     end
   end
 end
