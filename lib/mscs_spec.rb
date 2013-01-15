@@ -37,6 +37,25 @@ ipres={
 # at later point.
 
 ############### config block end
+describe "cluster creation" do
+  context "when clustername is #{cluster_name}" do
+    
+    before :all do
+      @cluster_config={
+        :ClusterName       => cluster_name,
+        :IPAddresses       => cluster_ipaddress,
+        :NodeNames         => cluster_nodes,
+        :SubnetMasks       => cluster_subnetmask,
+      }
+    end
+    
+    it "create cluster" do
+      createcluster=Mscs::Cluster.create(server, @cluster_config,kerb_name)
+      createcluster.should eq(nil)
+      sleep (5)
+    end
+  end
+end
 
 describe "cluster_enumeration" do
   context "when clustername is #{cluster_name}" do
@@ -185,21 +204,7 @@ describe "cluster resource property setting" do
   end
 end
 
-describe "cluster resource private property query" do
-  context "when clustername is #{cluster_name}" do
-    before :all do
-      $opensesame=Mscs::Cluster.open('Cluster',server)
-    end
-    it "query a specific resource private properties" do
-      resquery=Mscs::Resource.query_priv($opensesame, cluster_existingresourceip, ['Address','SubnetMask'])
-      resquery.should be_a_kind_of(Hash)
-      resquery.should have_key(:Address) 
-      resquery.should have_key(:SubnetMask)
-      resquery[:SubnetMask].should eq(cluster_existingresource_privprop)
-      
-    end
-  end
-end
+
 
 describe "cluster resource dependency" do
   context "when clustername is #{cluster_name}" do
@@ -221,6 +226,20 @@ describe "cluster resource dependency" do
     it "add cluster resource dependency" do
       resdependent=Mscs::Resource::Dependency.remove($opensesame, cluster_newres2, cluster_newres1)
       resdependent.should eq(0)
+    end
+  end
+end
+
+describe "cluster_destroy" do
+  context "when clustername is #{cluster_name}" do
+    before :all do
+      $opensesame=Mscs::Cluster.open('Cluster',server)
+    end
+
+    it "deletes a cluster resource group" do
+      removal=Mscs::Cluster.destroy($opensesame)
+      removal.should eq(0)
+      #expect {cluster.resourcegroups.item(cluster_newgroup)}.to raise_error
     end
   end
 end
