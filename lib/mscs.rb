@@ -277,4 +277,26 @@ module Mscs
       end #remove
     end #dependency
   end
+  
+  class Node
+    def self.add(hCluster, node)
+      node = utf8_to_utf16le(node)
+      Functions::CreateClusterNode.call(hCluster,node)
+    end
+
+    def self.remove(hCluster, node)
+      hGroup=Mscs::Cluster.open('Node', node, hCluster)
+      Functions::DeleteClusterNode.call(hGroup)    # this needs to be the handle of the group not the name. enum groups...
+    end
+
+    def self.query(hCluster, node)
+      Mscs::Cluster.enumerate('Cluster',hcluster,CLUSTER_ENUM_NODE)
+    end  
+  end
+
+  class Network
+    def self.SetClusterNetworkName(hCluster,new)
+      network
+    end
+  end
 end
