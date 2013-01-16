@@ -188,7 +188,7 @@ module Mscs
       colItems = objWMIService.ExecQuery("Select * from MSCluster_Resource where name='#{resource}'")
       colItems.each {|property| 
         @property=property
-        @res_type=property.type
+        @res_type=@property.properties_('Type').value
       }
 
       case @res_type
