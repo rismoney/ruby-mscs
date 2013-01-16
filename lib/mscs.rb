@@ -202,7 +202,6 @@ module Mscs
 
       when "Network Name"
         hash_res.has_key?(:name) or raise 'network name must have name'
-        hash_res.has_key?(:remappipenames) or raise 'remappipenames'
       when "File Server"
         hash_res.has_key?(:name) or raise 'name needed'
         hash_res.has_key?(:path) or raise 'path needed'
