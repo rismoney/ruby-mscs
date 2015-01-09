@@ -1,96 +1,65 @@
 require 'pathname'
 dir = Pathname.new(__FILE__).parent
 $LOAD_PATH.unshift(dir, dir + 'lib', dir + '../lib')
-
+begin
+  require 'win32ole'
+rescue LoadError
+end
 
 module Mscs
-
-  Dir[File.join(File.dirname(__FILE__), 'mscs', '*.rb')].each do |mscs_file|
-    require mscs_file
-  end
-
-  include Mscs::Constants
-  extend Mscs::Functions
-  extend Mscs::Constants
-
   class Cluster
+    #class Error < StandardError; end
 
-    def self.wmiconnect(clustername,kerb_name=nil)
-      if kerb_name
-        objWMIService  = WIN32OLE.connect("winmgmts:{impersonationLevel=delegate,authenticationLevel=pktPrivacy,authority=kerberos:#{kerb_name}}!\\\\#{clustername}\\root\\mscluster")
+    @@wmi_username = nil
+    @@wmi_server = nil
+
+    def self.initialize(server,username=nil)
+      @@wmi_username = username
+      @@wmi_server = server
+    end
+
+    def self.connectstring
+      if @@wmi_username
+        conn_str = "winmgmts:{impersonationLevel=delegate,authenticationLevel=pktPrivacy,authority=kerberos:#{@@wmi_username}}!\\\\#{@@wmi_server}\\root\\mscluster"
       else
-        objWMIService  = WIN32OLE.connect("winmgmts:{impersonationLevel=impersonate,authenticationLevel=pktPrivacy}!\\\\#{clustername}\\root\\mscluster")
+        conn_str = "winmgmts:{impersonationLevel=impersonate,authenticationLevel=pktPrivacy}!\\\\#{@@wmi_server}\\root\\mscluster"
       end
-      return objWMIService
     end
 
-    def self.open(open_type, open_name, cluster_handle=nil)
-      open_name = utf8_to_utf16le(open_name)
-     
-      cluster_open = begin
-        case open_type
-        when 'Cluster'      ; Functions::OpenCluster
-        when 'Group'        ; Functions::OpenClusterGroup
-        when 'Resource'     ; Functions::OpenClusterResource
-        when 'Network'      ; Functions::OpenClusterNetWork
-        when 'Node'         ; Functions::OpenClusterNode
-        end
+    def self.wmiconnect
+      winmgmts = Mscs::Cluster.connectstring
+      begin
+        WIN32OLE.connect(winmgmts)
+      rescue WIN32OLERuntimeError => err
+        raise Error, err
       end
-
-      # only 1 arg needed for OpenCluster, 2 for the others
-
-      open_type == 'Cluster' ? (handle = cluster_open.call(open_name)) : (handle = cluster_open.call(cluster_handle,open_name))
-      return handle
     end
 
-    def self.enumerate(enumerationtype, myhandle, dwtype)
-      chrs = (0.chr * 260)
-      buffer1=utf8_to_utf16le(chrs)
-      buffer2=utf8_to_utf16le(chrs)
-      size=utf8_to_utf16le('260')
-      outputlist = []
-      handle = myhandle
-
-      open_enum, cluster_enum = begin
-        case enumerationtype
-        when 'Cluster'  ; [Functions::ClusterOpenEnum, Functions::ClusterEnum]
-        when 'Group'    ; [Functions::ClusterGroupOpenEnum, Functions::ClusterGroupEnum]
-        when 'Resource' ; [Functions::ClusterResourceOpenEnum, Functions::ClusterResourceEnum]
-        when 'Network' ;  [Functions::ClusterNetworkOpenEnum, Functions::ClusterNetworkEnum]
-        when 'Node' ;     [Functions::ClusterNodeOpenEnum, Functions::ClusterNodeEnum]
-        end
+		def self.state
+      objWMIService = wmiconnect
+      objClus = objWMIService.Get("MSCluster_Cluster")
+      nodestate=objClus.ExecMethod_("GetNodeClusterState")
+      case nodestate.ClusterState
+        when 0 ; return 'ClusterStateNotInstalled'
+        when 1 ; return 'ClusterStateNotConfigured'
+        when 3 ; return 'ClusterStateNotRunning'
+        when 19 ; return 'ClusterStateRunning'
       end
-
-      hEnum = open_enum.call(handle, dwtype)
-
-      i = 0
-      until cluster_enum.call(hEnum, i, buffer1, buffer2, size) !=0
-        bufferlength, = size.unpack('L')
-        outputname = utf16le_to_usascii(buffer2).slice(0..bufferlength).strip
-        outputlist << outputname
-        size=utf8_to_utf16le('260')
-        i += 1
-      end
-
-      return outputlist
     end
 
-    def self.name(hCluster)
-      chrs = (0.chr * 260)
-      buffer1=utf8_to_utf16le(chrs)
-      size=utf8_to_utf16le('260')
-      Functions::GetClusterInformation.call(hCluster,buffer1,size,0)
-      name=(utf16le_to_usascii(buffer1)).strip
-      return name
+    def self.nodename
+      objWMIService = wmiconnect
+      clustername=objWMIService.ExecQuery('select name from mscluster_node')
+      return clustername.each.first.name
     end
 
-    def self.create(server, cluster_config={},wmi_username=nil)
+    def self.create(cluster_config={})
       cluster_config.has_key?(:ClusterName) or raise 'requires ClusterName key'
       cluster_config.has_key?(:IPAddresses) or raise 'requires IPAddresses key'
       cluster_config.has_key?(:NodeNames) or raise 'requires NodeNames key'
       cluster_config.has_key?(:SubnetMasks) or raise 'requires SubnetMasks key'
-      
-      wmi_username ? (objWMIService=Mscs::Cluster.wmiconnect(server,wmi_username)) : (objWMIService=Mscs::Cluster.wmiconnect server)
+
+      objWMIService = wmiconnect
       objClus = objWMIService.Get("MSCluster_cluster")
       objInParam= objClus.Methods_("CreateCluster").InParameters.SpawnInstance_()
       cluster_config.each do |key, value|
@@ -101,92 +70,79 @@ module Mscs
       objoutparams = objClus.ExecMethod_("CreateCluster", objInParam)
     end
 
-
-    def self.createapi_busted
-      #cluster_name, nodes, ips
-      
-      cluster_name = 'cc-git.office.iseoptions.com'
-      nodes = ['cc-git01']
-      ips = ['30.3.4.45']
-      version = 0x700
-      cluster_name = utf8_to_utf16le(cluster_name)
-
-      cluster_config = Struct.new(:version, :clustername, :nodecount, :nodes, :ipcount, :ips, :emptycluster)
-      node_array_ptr=[]
-
-      nodes.each {|item| node_array_ptr << utf8_to_utf16le(item)}
-      nodes_ptr = node_array_ptr.map{|x| [x].pack('p')}.join
-      nodelist = [nodes_ptr].pack('p').unpack('L').first
-      cnodes = 1
-
-      ip_entry = Struct.new(:ip,:len)
-      ipentry_array=[]
-      ips.each {|item| ipentry_array.push(ip_entry.new utf8_to_utf16le(item),24)}
-      ipentry_array_ptr = ipentry_array.map{|x| x.to_a.pack('pL')}
-      ipentry_ptr = ipentry_array_ptr.map{|x| [x].pack('p')}.join
-      iplist = [ipentry_ptr].pack('p').unpack('L').first
-
-      cips = ipentry_array.count
-      cluster_config_struct = cluster_config.new(version, cluster_name, cnodes, nodelist, cips, iplist, 0)
-      cluster_config_ptr = cluster_config_struct.to_a.pack("LpLLLLL")
-      address = [cluster_config_ptr].pack('p').unpack('L').first
-
-      getlasterror = Win32API.new("Kernel32","GetLastError", "V", "N")
-
-      Functions::CreateCluster.call(address,nil,nil)
-      puts "GetLastError = #{getlasterror.Call}"
+    def self.destroy
+      objWMIService = wmiconnect
+      cluster=objWMIService.ExecQuery("select * from MSCluster_Cluster")
+      cluster.each.first.DestroyCluster
     end
-  
-    def self.destroy(hCluster)
-      Functions::DestroyCluster.call(hCluster,nil,nil, 1)
-    end 
-
   end
-  
+
   class Group
-    def self.add(hCluster, res_grp)
-      res_grp = utf8_to_utf16le(res_grp)
-      Functions::CreateClusterGroup.call(hCluster,res_grp)
+    def self.create(res_grp)
+      objWMIService = Mscs::Cluster.wmiconnect
+      objClus = objWMIService.Get("MSCluster_ResourceGroup")
+      oMethod=objClus.Methods_("CreateGroup")
+      oInParam = oMethod.InParameters.SpawnInstance_()
+      oInParam.GroupName = res_grp
+      oOutParam = objClus.ExecMethod_("CreateGroup", oInParam)
     end
 
-    def self.remove(hCluster, res_grp)
-      hGroup=Mscs::Cluster.open('Group', res_grp, hCluster)
-      Functions::DeleteClusterGroup.call(hGroup)    # this needs to be the handle of the group not the name. enum groups...
+    def self.delete(res_grp)
+      objWMIService = Mscs::Cluster.wmiconnect
+      groups=objWMIService.ExecQuery("select name from MSCluster_ResourceGroup where Name='#{res_grp}'")
+      groups.each {|group| group.DeleteGroup}
     end
 
-    def self.query(hCluster, res_grp)
-      hGroup=Mscs::Cluster.open('Group', res_grp, hCluster)
-      Mscs::Cluster.enumerate('Group',hGroup, Constants::CLUSTER_GROUP_ENUM_CONTAINS)
-    end  
+    def self.query
+      grouplist = []
+      objWMIService = Mscs::Cluster.wmiconnect
+      groups=objWMIService.ExecQuery('select name from MScluster_ResourceGroup')
+      groups.each {|group| grouplist << group.name}
+      return grouplist
+    end
   end
-  
+
   class Resource
-    def self.add(hCluster, res_name, res_type, res_grp)
+    def self.add(res_name, res_type, res_grp)
       res_type = 'IP Address' if res_type =~ /ip/i
       res_type = 'Network Name' if ['nn', 'networkname'].include?(res_type.downcase)
-      res_name = utf8_to_utf16le(res_name)
-      res_type = utf8_to_utf16le(res_type)
-      hGroup=Mscs::Cluster.open('Group', res_grp, hCluster)
-      hRes = Functions::CreateClusterResource.call(hGroup,res_name,res_type,0)
+
+      objWMIService = Mscs::Cluster.wmiconnect
+      objClus = objWMIService.Get("MSCluster_Resource")
+      oMethod=objClus.Methods_("CreateResource")
+      oInParam = oMethod.InParameters.SpawnInstance_()
+      oInParam.ResourceName = res_name
+      oInParam.Resourcetype = res_type
+      oInParam.Group = res_grp
+      oOutParam = objClus.ExecMethod_("CreateResource", oInParam)
     end
 
-    def self.remove(hCluster, res_name)
-      hResource=Mscs::Cluster.open('Resource', res_name, hCluster)
-      Functions::DeleteClusterResource.call(hResource)
+    def self.delete(res_name)
+      objWMIService = Mscs::Cluster.wmiconnect
+      resources=objWMIService.ExecQuery("select * from MSCluster_Resource where Name='#{res_name}'")
+      resources.each {|resource| resource.DeleteResource}
     end
 
-    def self.query(hCluster, res_name)
-      hResource = Mscs::Cluster.open('Resource', res_name, hCluster)
-      # if hResource is a Fix >0 then run this, otherwise irb shits the bed.  we should probably fix all the other calls after opens
-      Mscs::Cluster.enumerate('Resource', hResource, Constants::CLUSTER_RESOURCE_ENUM_DEPENDS)
+    def self.getgroup(res_name)
+      objWMIService = Mscs::Cluster.wmiconnect
+      wql = "ASSOCIATORS OF {MSCluster_Resource.Name='#{res_name}'} WHERE AssocClass = MSCluster_ResourceGroupToResource"
+      group=objWMIService.ExecQuery(wql)
+      group.each.first.name
     end
 
-    def self.set_priv (hCluster,resource,hash_res={})
+    def self.query
+      resourcelist = []
+      objWMIService = Mscs::Cluster.wmiconnect
+      resources=objWMIService.ExecQuery('select name from MScluster_Resource')
+      resources.each {|resource| resourcelist << resource.name}
+      return resourcelist
+    end
 
-      clustername=Mscs::Cluster.name(hCluster)
-      objWMIService=Mscs::Cluster.wmiconnect clustername
+    def self.set_priv (resource,hash_res={})
+
+      objWMIService = Mscs::Cluster.wmiconnect
       colItems = objWMIService.ExecQuery("Select * from MSCluster_Resource where name='#{resource}'")
-      colItems.each {|property| 
+      colItems.each {|property|
         @property=property
         @res_type=@property.properties_('Type').value
       }
@@ -232,70 +188,97 @@ module Mscs
       @property = nil
     end
 
-    def self.query_priv (hCluster,resource,priv_array)
-      res_privprop= {}
-      size="0" * 260
-      chrs = (0.chr * 1024)
-      buffer1=utf8_to_utf16le(chrs)
-      buffer2=utf8_to_utf16le(chrs)
-      hResource=Mscs::Cluster.open('Resource', resource, hCluster)
-      Functions::ClusterResourceControl.call(hResource, 0, Constants::CLUSCTL_RESOURCE_GET_PRIVATE_PROPERTIES, 0, 0, buffer1, 4096, size)
-      size = size.unpack('L')
-
-      priv_array.each { |item| 
-        ptr = 0.chr * 4
-        res=Functions::ResUtilFindSzProperty.call(buffer1, size[0], utf8_to_utf16le(item), ptr)
-        lstrcpyW = Win32API.new('kernel32','lstrcpyW',['P','L'],'P')
-        lstrcpyW.call(buffer2, ptr.unpack('L')[0])
-        value = (utf16le_to_usascii(buffer2)).strip
-        attrib = item.to_sym
-        res_privprop[attrib] = value
-        buffer2=utf8_to_utf16le(chrs)
+    def self.query_priv (resource)
+      objWMIService = Mscs::Cluster.wmiconnect
+      colItems = objWMIService.ExecQuery("Select * from MSCluster_Resource where name='#{resource}'")
+      colItems.each {|property|
+        @property=property
+        @res_type=@property.properties_('Type').value
       }
-      return res_privprop
+      keylist, values = []
+      @property.PrivateProperties.Properties_.each {|keys| keylist << keys.name}
+      keylist.each {|key| values << @property.PrivateProperties.Properties_.item(key).value}
+      priv_props = Hash[a.zip b]
     end
 
     class Dependency
-      def self.add(hCluster, res_name, dependson)
-        hres_name=Mscs::Cluster.open('Resource', res_name, hCluster)
-        hdependson=Mscs::Cluster.open('Resource', dependson, hCluster)
+      def self.add(res_name, dependson)
+        objWMIService = Mscs::Cluster.wmiconnect
+        resources=objWMIService.ExecQuery("select * from MSCluster_ResourceGroup where Name='#{res_name}'")
+        resources.each.first.AddDependency(dependson)
+      end
 
-        if Functions::CanResourceBeDependent.call(hres_name, hdependson)
-          Functions::AddClusterResourceDependency.call(hres_name, hdependson)
-        else
-          raise_error #not sure what I want to do here yet
-        end #if
-      end #add
-
-      def self.remove(hCluster, res_name, dependson)
-          hres_name=Mscs::Cluster.open('Resource', res_name, hCluster)
-          hdependson=Mscs::Cluster.open('Resource', dependson, hCluster)
-
-          #need if it is already dependendent) check
-          Functions::RemoveClusterResourceDependency.call(hres_name, hdependson)
-      end #remove
-    end #dependency
+      def self.remove(res_name, dependson)
+        objWMIService = Mscs::Cluster.wmiconnect
+        resources=objWMIService.ExecQuery("select * from MSCluster_ResourceGroup where Name='#{res_name}'")
+        resources.each.first.RemoveDependency(dependson)
+      end
+    end
   end
-  
+
+
+  class Disk
+    def self.add(diskid)
+      objWMIService = Mscs::Cluster.wmiconnect
+      objAvailableDisks = objWMIService.ExecQuery("Select * from MSCluster_AvailableDisk where ID='#{diskid}'")
+      objAvailableDisks.each do |disk|
+        disk.AddToCluster
+      end
+    end
+
+    def self.remove(diskid)
+      objWMIService = Mscs::Cluster.wmiconnect
+      disks=objWMIService.ExecQuery("select * from mscluster_resource where PrivateProperties.DiskSignature='#{diskid}'")
+      disks.each {|disk| disk.DeleteResource}
+    end
+
+    def self.query
+      disklist = []
+      objWMIService = Mscs::Cluster.wmiconnect
+      objAddedDisks = objWMIService.ExecQuery("Select ID from MSCluster_Disk")
+      objAddedDisks.each {|disk| disklist << disk.ID}
+      return disklist
+    end
+
+    def self.move(diskid,res_grp)
+      objWMIService = Mscs::Cluster.wmiconnect
+      disks=objWMIService.ExecQuery("select * from mscluster_resource where PrivateProperties.DiskSignature='#{diskid}'")
+      disks.each {|disk| disk.MoveToNewGroup(res_grp)}
+    end
+
+    def self.rename(diskid,newname)
+      objWMIService = Mscs::Cluster.wmiconnect
+      disks=objWMIService.ExecQuery("select * from mscluster_resource where PrivateProperties.DiskSignature='#{diskid}'")
+      disks.each {|disk| disk.Rename(newname)}
+    end
+
+  end
+
   class Node
-    def self.add(hCluster, node)
-      node = utf8_to_utf16le(node)
-      Functions::CreateClusterNode.call(hCluster,node)
+    def self.add(node)
+      objWMIService = Mscs::Cluster.wmiconnect
+      objClus = objWMIService.Get("MSCluster_Cluster")
+      oMethod=objClus.Methods_("AddNode")
+      oInParam = oMethod.InParameters.SpawnInstance_()
+      oInParam.NodeName = node
+      oOutParam = objClus.ExecMethod_("AddNode", oInParam)
     end
 
-    def self.remove(hCluster, node)
-      hGroup=Mscs::Cluster.open('Node', node, hCluster)
-      Functions::DeleteClusterNode.call(hGroup)    # this needs to be the handle of the group not the name. enum groups...
+    def self.remove(node)
+      objWMIService = Mscs::Cluster.wmiconnect
+      objClus = objWMIService.Get("MSCluster_Cluster")
+      oMethod=objClus.Methods_("EvictNode")
+      oInParam = oMethod.InParameters.SpawnInstance_()
+      oInParam.NodeName = node
+      oOutParam = objClus.ExecMethod_("EvictNode", oInParam)
     end
 
-    def self.query(hCluster, node)
-      Mscs::Cluster.enumerate('Cluster',hcluster,CLUSTER_ENUM_NODE)
-    end  
-  end
-
-  class Network
-    def self.SetClusterNetworkName(hCluster,new)
-      network
+    def self.query
+      nodelist = []
+      objWMIService = Mscs::Cluster.wmiconnect
+      nodes=objWMIService.ExecQuery('select systemname from mscluster_service')
+      nodes.each {|node| nodelist << node.systemname}
+      return nodelist
     end
   end
 end
